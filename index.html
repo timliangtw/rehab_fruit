@@ -171,6 +171,52 @@
             background: #222; padding: 8px 20px; border-radius: 15px; border: 1px solid #444;
         }
 
+        /* View Records Button */
+        #view-records-btn {
+            position: absolute; top: 20px; right: 20px;
+            font-size: 24px; padding: 10px 20px; background-color: #2196F3;
+            color: white; border: none; border-radius: 10px; cursor: pointer;
+            z-index: 100; box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+        }
+        #view-records-btn:hover { background-color: #1976D2; }
+
+        /* Records Modal */
+        #records-modal {
+            display: none; position: absolute; top: 0; left: 0; right: 0; bottom: 0;
+            background-color: rgba(0,0,0,0.9); z-index: 1000;
+            justify-content: center; align-items: center;
+        }
+        .records-content {
+            background-color: #222; padding: 30px; border-radius: 20px;
+            width: 80%; max-width: 800px; height: 80%; max-height: 600px;
+            display: flex; flex-direction: column; position: relative;
+            border: 2px solid #555;
+        }
+        .close-btn {
+            position: absolute; top: 15px; right: 20px; font-size: 36px;
+            color: #AAA; cursor: pointer; background: none; border: none;
+        }
+        .close-btn:hover { color: white; }
+        
+        /* Tabs */
+        .tabs { display: flex; border-bottom: 2px solid #444; margin-bottom: 20px; }
+        .tab-btn {
+            flex: 1; padding: 15px; font-size: 28px; background: none; border: none;
+            color: #888; cursor: pointer; font-weight: bold;
+        }
+        .tab-btn.active { color: #FFF; border-bottom: 4px solid #4CD964; }
+        
+        .tab-content { display: none; flex: 1; overflow-y: auto; }
+        .tab-content.active { display: block; }
+        
+        /* Table Styles */
+        table { width: 100%; border-collapse: collapse; color: white; font-size: 24px; text-align: center; }
+        th, td { padding: 12px; border-bottom: 1px solid #444; }
+        th { color: #4CD964; }
+        .trend-up { color: #4CD964; }
+        .trend-down { color: #FF3B30; }
+        .trend-flat { color: #AAA; }
+
         .py-overlay { display: none !important; }
     </style>
 </head>
@@ -179,6 +225,7 @@
 <div id="portrait-warning">請將裝置轉為「橫向」以進行訓練！</div>
 
 <div id="app-container">
+    <button id="view-records-btn" onclick="document.getElementById('records-modal').style.display='flex'; window.populate_records_modal()">查看紀錄</button>
     <div id="instruction">請找出 最左邊 的 蘋果</div>
     
     <div id="game-area">
@@ -194,6 +241,28 @@
     <div id="stats-area">
         <div id="today-progress">今日進度： <span id="today-count" style="color: #4CD964;">0</span> 題</div>
         <div id="stats-table-container"></div>
+    </div>
+</div>
+
+<div id="records-modal">
+    <div class="records-content">
+        <button class="close-btn" onclick="document.getElementById('records-modal').style.display='none'">&times;</button>
+        <div class="tabs">
+            <button id="btn-tab-history" class="tab-btn active" onclick="window.switch_tab('history')">歷史回顧</button>
+            <button id="btn-tab-leaderboard" class="tab-btn" onclick="window.switch_tab('leaderboard')">排行榜</button>
+        </div>
+        <div id="tab-history" class="tab-content active">
+            <table id="history-table">
+                <thead><tr><th>日期</th><th>完成題數</th><th>平均反應時間</th><th>進步幅度</th></tr></thead>
+                <tbody></tbody>
+            </table>
+        </div>
+        <div id="tab-leaderboard" class="tab-content">
+            <table id="leaderboard-table">
+                <thead><tr><th>名次</th><th>日期</th><th>分數 (題數)</th><th>平均反應時間</th></tr></thead>
+                <tbody></tbody>
+            </table>
+        </div>
     </div>
 </div>
 
@@ -393,6 +462,94 @@ def clear_timers():
     if state.timer_id is not None:
         js.clearTimeout(state.timer_id)
         state.timer_id = None
+
+def populate_records_modal():
+    try:
+        # History
+        history_tbody = js.document.querySelector("#history-table tbody")
+        history_tbody.innerHTML = ""
+        
+        dates = sorted(state.stats.keys())[-14:]
+        dates.reverse()
+        
+        for i, t_date in enumerate(dates):
+            data = state.stats[t_date]
+            count = data["count"]
+            avg_time = 0 if count == 0 else data["total_time"] / count
+            
+            trend_class = "trend-flat"
+            trend_char = "-"
+            if i < len(dates) - 1:
+                prev_date = dates[i+1]
+                prev_data = state.stats[prev_date]
+                prev_count = prev_data["count"]
+                prev_avg = 0 if prev_count == 0 else prev_data["total_time"] / prev_count
+                
+                if count > prev_count or (count == prev_count and avg_time < prev_avg):
+                    trend_class = "trend-up"
+                    trend_char = "&#11014;"
+                elif count < prev_count or (count == prev_count and avg_time > prev_avg):
+                    trend_class = "trend-down"
+                    trend_char = "&#11015;"
+                    
+            tr = js.document.createElement("tr")
+            for val in [t_date, str(count), f"{avg_time:.1f}s"]:
+                td = js.document.createElement("td")
+                td.innerText = val
+                tr.appendChild(td)
+            
+            td_trend = js.document.createElement("td")
+            span = js.document.createElement("span")
+            span.className = trend_class
+            span.innerHTML = trend_char
+            td_trend.appendChild(span)
+            tr.appendChild(td_trend)
+            history_tbody.appendChild(tr)
+
+        # Leaderboard
+        leaderboard_tbody = js.document.querySelector("#leaderboard-table tbody")
+        leaderboard_tbody.innerHTML = ""
+        
+        items = []
+        for date, data in state.stats.items():
+            count = data["count"]
+            if count == 0: continue
+            avg_time = data["total_time"] / count
+            items.append((date, count, avg_time))
+            
+        items.sort(key=lambda x: (-x[1], x[2]))
+        
+        for i, item in enumerate(items[:5]):
+            date, count, avg_time = item
+            tr = js.document.createElement("tr")
+            for val in [str(i+1), date, str(count), f"{avg_time:.1f}s"]:
+                td = js.document.createElement("td")
+                td.innerText = val
+                tr.appendChild(td)
+            leaderboard_tbody.appendChild(tr)
+    except Exception as e:
+        print(f"Error populating records modal: {e}")
+
+try:
+    js.window.populate_records_modal = create_proxy(populate_records_modal)
+except Exception as e:
+    print(f"Error creating proxy for populate_records_modal: {e}")
+
+def switch_tab(tab_id):
+    js.document.getElementById("tab-history").classList.remove("active")
+    js.document.getElementById("tab-leaderboard").classList.remove("active")
+    
+    tab_btns = js.document.querySelectorAll(".tab-btn")
+    for i in range(tab_btns.length):
+        tab_btns.item(i).classList.remove("active")
+        
+    js.document.getElementById(f"tab-{tab_id}").classList.add("active")
+    js.document.getElementById(f"btn-tab-{tab_id}").classList.add("active")
+
+try:
+    js.window.switch_tab = create_proxy(switch_tab)
+except Exception as e:
+    print(f"Error creating proxy for switch_tab: {e}")
 
 state.update_stats_ui()
 render_round()
