@@ -1,0 +1,474 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>全景搜尋器 - 復健訓練</title>
+    <link rel="stylesheet" href="https://pyscript.net/releases/2023.05.1/pyscript.css" />
+    <script defer src="https://pyscript.net/releases/2023.05.1/pyscript.js"></script>
+    <style>
+        /* CSS resets and base styles */
+        body {
+            margin: 0;
+            padding: 0;
+            background-color: #000;
+            color: #FFF;
+            font-family: 'Helvetica Neue', Arial, sans-serif;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+            width: 100vw;
+            user-select: none;
+            -webkit-user-select: none;
+        }
+
+        /* Portrait Warning */
+        #portrait-warning {
+            display: none;
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: #000;
+            z-index: 9999;
+            color: #FFEB3B;
+            font-size: 48px;
+            font-weight: bold;
+            text-align: center;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+
+        @media (orientation: portrait) {
+            #portrait-warning {
+                display: flex;
+            }
+
+            #app-container {
+                display: none !important;
+            }
+        }
+
+        /* App Container */
+        #app-container {
+            display: flex;
+            flex-direction: column;
+            flex: 1;
+            position: relative;
+        }
+
+        /* Header / Instruction */
+        #instruction {
+            font-size: 50px;
+            font-weight: bold;
+            text-align: center;
+            margin-top: 20px;
+            color: #FFF;
+            min-height: 70px;
+            z-index: 10;
+        }
+
+        /* Game Area */
+        #game-area {
+            flex: 1;
+            position: relative;
+            display: flex;
+            align-items: center;
+        }
+
+        /* Left Boundary Line */
+        #left-boundary {
+            position: absolute;
+            left: 0;
+            top: 0;
+            bottom: 0;
+            width: 30px;
+            background-color: #FF2D55;
+            opacity: 0;
+            z-index: 5;
+        }
+
+        /* Items Container */
+        #items-container {
+            position: absolute;
+            left: 10%;
+            right: 10%;
+            height: 180px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            z-index: 10;
+        }
+
+        .item {
+            width: 120px;
+            height: 120px;
+            cursor: pointer;
+            transition: transform 0.2s;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            border-radius: 20px;
+        }
+
+        .item svg {
+            width: 100%;
+            height: 100%;
+            filter: drop-shadow(2px 4px 6px rgba(0, 0, 0, 0.5));
+        }
+
+        .item:active {
+            transform: scale(0.9);
+        }
+
+        /* Animations */
+        @keyframes flash-red {
+
+            0%,
+            100% {
+                opacity: 0;
+                box-shadow: none;
+            }
+
+            50% {
+                opacity: 1;
+                box-shadow: 0 0 30px #FF2D55;
+            }
+        }
+
+        .boundary-flashing {
+            animation: flash-red 1s infinite;
+        }
+
+        @keyframes item-flash-glow {
+            0% {
+                filter: drop-shadow(0 0 0px #FFEB3B);
+                transform: scale(1);
+            }
+
+            100% {
+                filter: drop-shadow(0 0 40px #FFEB3B);
+                transform: scale(1.1);
+            }
+        }
+
+        .item-flashing {
+            animation: item-flash-glow 0.8s infinite alternate !important;
+            z-index: 20;
+        }
+
+        /* Hint Message */
+        #hint-message {
+            position: absolute;
+            top: 70%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 48px;
+            font-weight: bold;
+            color: #FF9800;
+            opacity: 0;
+            transition: opacity 0.3s;
+            pointer-events: none;
+            background: rgba(0, 0, 0, 0.85);
+            padding: 20px 40px;
+            border-radius: 30px;
+            border: 4px solid #FF9800;
+            z-index: 50;
+        }
+
+        /* Reward Modal */
+        #reward-modal {
+            display: none;
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: rgba(0, 0, 0, 0.95);
+            z-index: 1000;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+        }
+
+        #flower {
+            font-size: 200px;
+            animation: bloom 1.5s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        @keyframes bloom {
+            0% {
+                transform: scale(0) rotate(-45deg);
+                opacity: 0;
+            }
+
+            50% {
+                transform: scale(1.3) rotate(10deg);
+                opacity: 1;
+                filter: drop-shadow(0 0 50px #FF2D55);
+            }
+
+            100% {
+                transform: scale(1) rotate(0deg);
+                opacity: 1;
+                filter: drop-shadow(0 0 20px #FF2D55);
+            }
+        }
+
+        #reward-text {
+            font-size: 64px;
+            font-weight: bold;
+            color: #FFEB3B;
+            margin-top: 40px;
+            text-align: center;
+            text-shadow: 0 0 20px rgba(255, 235, 59, 0.5);
+        }
+
+        /* Stats Area */
+        #stats-area {
+            height: 120px;
+            background-color: #111;
+            border-top: 3px solid #333;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+        }
+
+        #today-progress {
+            font-size: 40px;
+            font-weight: bold;
+            color: #FFF;
+            margin-bottom: 10px;
+        }
+
+        #stats-table-container {
+            display: flex;
+            gap: 20px;
+            font-size: 24px;
+            color: #AAA;
+            font-weight: bold;
+        }
+
+        .stat-item {
+            background: #222;
+            padding: 8px 20px;
+            border-radius: 15px;
+            border: 1px solid #444;
+        }
+
+        /* Hide PyScript loading spinner for cleaner UI */
+        .py-overlay {
+            display: none !important;
+        }
+    </style>
+</head>
+
+<body>
+
+    <div id="portrait-warning">
+        請將裝置轉為「橫向」以進行訓練！
+    </div>
+
+    <div id="app-container">
+        <div id="instruction">請找出 最左邊 的 蘋果</div>
+
+        <div id="game-area">
+            <div id="left-boundary"></div>
+            <div id="items-container">
+                <!-- Items generated by PyScript -->
+            </div>
+            <div id="hint-message">再往左邊找找看</div>
+            <div id="reward-modal">
+                <div id="flower">🌺</div>
+                <div id="reward-text">妳的眼睛真準！太棒了！</div>
+            </div>
+        </div>
+
+        <div id="stats-area">
+            <div id="today-progress">今日進度： <span id="today-count" style="color: #4CD964;">0</span> 題</div>
+            <div id="stats-table-container">
+                <!-- Stats generated by PyScript -->
+            </div>
+        </div>
+    </div>
+
+    <py-script>
+        import js
+        from pyodide.ffi import create_proxy
+        import random
+        import time
+        import json
+        from datetime import datetime
+
+        # ==========================================
+        # Assets: SVG definitions for 6 distinct items
+        # ==========================================
+        SVG_ITEMS = {
+        "蘋果": '<div
+            style="font-size: 110px; line-height: 120px; text-align: center; width: 100%; filter: drop-shadow(2px 4px 6px rgba(0,0,0,0.5));">
+            🍎</div>',
+        "香蕉": '<div
+            style="font-size: 110px; line-height: 120px; text-align: center; width: 100%; filter: drop-shadow(2px 4px 6px rgba(0,0,0,0.5));">
+            🍌</div>',
+        "橘子": '<div
+            style="font-size: 110px; line-height: 120px; text-align: center; width: 100%; filter: drop-shadow(2px 4px 6px rgba(0,0,0,0.5));">
+            🍊</div>',
+        "葡萄": '<div
+            style="font-size: 110px; line-height: 120px; text-align: center; width: 100%; filter: drop-shadow(2px 4px 6px rgba(0,0,0,0.5));">
+            🍇</div>',
+        "草莓": '<div
+            style="font-size: 110px; line-height: 120px; text-align: center; width: 100%; filter: drop-shadow(2px 4px 6px rgba(0,0,0,0.5));">
+            🍓</div>',
+        "西瓜": '<div
+            style="font-size: 110px; line-height: 120px; text-align: center; width: 100%; filter: drop-shadow(2px 4px 6px rgba(0,0,0,0.5));">
+            🍉</div>'
+        }
+
+        # ==========================================
+        # Audio synthesis for positive/negative tones
+        # ==========================================
+        def play_tone(freq, type, duration):
+        try:
+        audio_ctx = js.window.AudioContext.new() if hasattr(js.window, 'AudioContext') else
+        js.window.webkitAudioContext.new()
+        oscillator = audio_ctx.createOscillator()
+        gain_node = audio_ctx.createGain()
+
+        oscillator.type = type
+        oscillator.frequency.value = freq
+
+        oscillator.connect(gain_node)
+        gain_node.connect(audio_ctx.destination)
+
+        oscillator.start()
+        gain_node.gain.exponentialRampToValueAtTime(0.00001, audio_ctx.currentTime + duration)
+        oscillator.stop(audio_ctx.currentTime + duration)
+        except Exception as e:
+        print("Audio not supported or error:", e)
+
+        def play_success():
+        play_tone(600, 'sine', 0.1)
+        js.setTimeout(create_proxy(lambda: play_tone(800, 'sine', 0.2)), 100)
+
+        def play_error():
+        play_tone(300, 'triangle', 0.3)
+
+        # ==========================================
+        # Game State
+        # ==========================================
+        class GameState:
+        def __init__(self):
+        self.round_start_time = 0
+        self.target_name = ""
+        self.target_index = -1
+        self.total_correct = 0
+        self.num_items = 5 # 5 items spread across screen
+        self.timer_id = None
+        self.hint_timer_id = None
+        self.stats = self.load_stats()
+        self.today_date = datetime.now().strftime("%Y-%m-%d")
+        self.locked = False # Prevent clicks during transitions
+
+        if self.today_date not in self.stats:
+        self.stats[self.today_date] = {"count": 0, "total_time": 0.0}
+
+        def load_stats(self):
+        try:
+        data = js.window.localStorage.getItem("rehab_scan_data")
+        if data:
+        return json.loads(data)
+        except Exception:
+        pass
+        return {}
+
+        def save_stats(self):
+        try:
+        js.window.localStorage.setItem("rehab_scan_data", json.dumps(self.stats))
+        self.update_stats_ui()
+        except Exception:
+        pass
+
+        def update_stats_ui(self):
+        today_data = self.stats.get(self.today_date, {"count": 0, "total_time": 0.0})
+        js.document.getElementById("today-count").innerText = str(today_data["count"])
+
+        # Build last 7 days history
+        container = js.document.getElementById("stats-table-container")
+        container.innerHTML = ""
+
+        dates = sorted(self.stats.keys())[-7:]
+        for t_date in dates:
+        data = self.stats[t_date]
+        count = data["count"]
+        avg = 0 if count == 0 else data["total_time"] / count
+
+        div = js.document.createElement("div")
+        div.className = "stat-item"
+        display_date = t_date[-5:] # MM-DD
+        div.innerText = f"{display_date}: {count}題 (平均 {avg:.1f}s)"
+        container.appendChild(div)
+
+        state = GameState()
+
+        # ==========================================
+        # Core Game Logic
+        # ==========================================
+        def render_round():
+        state.locked = False
+        clear_timers()
+
+        js.document.getElementById("left-boundary").classList.remove("boundary-flashing")
+        js.document.getElementById("hint-message").style.opacity = "0"
+
+        container = js.document.getElementById("items-container")
+        container.innerHTML = ""
+
+        # Target Selection
+        names = list(SVG_ITEMS.keys())
+        state.target_name = random.choice(names)
+        names.remove(state.target_name)
+
+        distractors = random.sample(names, state.num_items - 1)
+
+        # 80% left side logic
+        if random.random() < 0.80: state.target_index=0 else: state.target_index=random.randint(1, state.num_items - 1)
+            items=distractors[:] items.insert(state.target_index, state.target_name) # Build DOM for i, name in
+            enumerate(items): div=js.document.createElement("div") div.className="item" div.id=f"item-{i}"
+            div.innerHTML=SVG_ITEMS[name] # Using a closure factory to bind the correct index def make_handler(idx): def
+            on_click(evt): if not state.locked: handle_click(idx) return create_proxy(on_click)
+            div.addEventListener("click", make_handler(i)) container.appendChild(div) # Update Instruction
+            js.document.getElementById("instruction").innerText=f"請找出 最左邊 的 【{state.target_name}】"
+            state.round_start_time=time.time() # Set 5s inactivity timer
+            state.timer_id=js.setTimeout(create_proxy(check_inactivity), 5000) def handle_click(clicked_index): if
+            clicked_index==state.target_index: # Correct guess logic state.locked=True clear_timers() play_success()
+            elapsed=time.time() - state.round_start_time # Stop flashing
+            js.document.getElementById("left-boundary").classList.remove("boundary-flashing")
+            item_el=js.document.getElementById(f"item-{clicked_index}") if item_el:
+            item_el.classList.remove("item-flashing") item_el.style.transform="scale(1.3)" item_el.style.zIndex="100" #
+            Update metrics today=state.stats[state.today_date] today["count"] +=1 today["total_time"] +=elapsed
+            state.total_correct +=1 state.save_stats() if state.total_correct % 10==0:
+            js.setTimeout(create_proxy(show_reward), 600) else: js.setTimeout(create_proxy(render_round), 800) else: #
+            Incorrect guess logic play_error() show_hint("再往左邊找找看") def show_hint(msg):
+            hint=js.document.getElementById("hint-message") hint.innerText=msg hint.style.opacity="1" if
+            state.hint_timer_id is not None: js.clearTimeout(state.hint_timer_id) def hide_hint():
+            hint.style.opacity="0" state.hint_timer_id=js.setTimeout(create_proxy(hide_hint), 2000) def
+            check_inactivity(): if state.target_index==0: # Prompt visual neglect flashes
+            js.document.getElementById("left-boundary").classList.add("boundary-flashing")
+            item=js.document.getElementById("item-0") if item: item.classList.add("item-flashing") def show_reward():
+            modal=js.document.getElementById("reward-modal") modal.style.display="flex" flowers=["🌹", "🌺" , "🌸"
+            , "🌻" , "🌷" ] js.document.getElementById("flower").innerText=random.choice(flowers) def hide_reward():
+            modal.style.display="none" render_round() js.setTimeout(create_proxy(hide_reward), 4000) def clear_timers():
+            if state.timer_id is not None: js.clearTimeout(state.timer_id) state.timer_id=None # Boot app
+            state.update_stats_ui() render_round() </py-script>
+
+</body>
+
+</html>
